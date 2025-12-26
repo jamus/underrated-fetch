@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Source shell profile to get npm in PATH (for nvm, fnm, etc.)
+[ -s "$HOME/.nvm/nvm.sh" ] && . "$HOME/.nvm/nvm.sh"
+[ -s "$HOME/.zshrc" ] && . "$HOME/.zshrc" 2>/dev/null || true
+
+npm run lint && npm run tscheck
+
