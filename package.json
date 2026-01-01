@@ -15,8 +15,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "npm run clean && tsc -p ./tsconfig.json",
-    "clean": "del-cli ./lib",
+    "build": "tsc",
     "tscheck": "tsc --noEmit --project tsconfig.test.json",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -48,14 +47,11 @@
     "@types/node": "^25.0.3",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
-    "del-cli": "^7.0.0",
     "eslint": "^9.0.0",
     "husky": "^9.0.0",
     "tsx": "^4.7.0",
-    "typescript": "^5.9.3",
+    "typescript": "^5.4.0",
     "typescript-eslint": "^8.0.0"
   },
-  "dependencies": {
-    "lint": "^1.1.2"
-  }
+  "dependencies": {}
 }
