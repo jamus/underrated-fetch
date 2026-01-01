@@ -2,12 +2,12 @@
 /**
  * Example: Express server with Redis-backed caching using createCachedFetch.
  *
- * This example shows how to use createCachedFetch with an async Redis store
+ * This example shows how to use createCachedFetch with a Redis store
  * for a minimal Express server — ideal as a gateway for mobile apps.
  *
  * Setup:
- * 1. npm install express @upstash/redis dotenv
- * 2. Copy examples/.env.example to examples/.env and add your credentials
+ * 1. npm install express redis dotenv
+ * 2. Copy examples/.env.example to examples/.env and add your Redis connection string
  * 3. npx tsx examples/redis-store.ts
  * 4. Visit http://localhost:3000/launch/2baf1b13-6159-4640-864d-7959f9bfe978
  */
@@ -20,41 +20,42 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 config({ path: join(__dirname, '.env') });
 
 import express from 'express';
-import { Redis } from '@upstash/redis';
+import { createClient } from 'redis';
 import { createCachedFetch } from '../src/index.js';
 import type { CacheStore, CacheEntry } from '../src/types.js';
 
 // --- Redis Store Implementation ---
 
-function createRedisStore<T>(redis: Redis, prefix = 'cache:'): CacheStore<T> {
+function createRedisStore<T>(redisClient: ReturnType<typeof createClient>, prefix = 'cache:'): CacheStore<T> {
   return {
     async get(key: string): Promise<CacheEntry<T> | undefined> {
-      const data = await redis.get<CacheEntry<T>>(`${prefix}${key}`);
-      return data ?? undefined;
+      const data = await redisClient.get(`${prefix}${key}`);
+      if (!data) return undefined;
+      return JSON.parse(data) as CacheEntry<T>;
     },
 
     async set(key: string, entry: CacheEntry<T>): Promise<void> {
       const ttlSeconds = Math.ceil((entry.expiresAt - Date.now()) / 1000);
       if (ttlSeconds > 0) {
-        await redis.set(`${prefix}${key}`, entry, { ex: ttlSeconds });
+        await redisClient.setEx(`${prefix}${key}`, ttlSeconds, JSON.stringify(entry));
       }
     },
 
     async delete(key: string): Promise<void> {
-      await redis.del(`${prefix}${key}`);
+      await redisClient.del(`${prefix}${key}`);
     },
 
     async clear(): Promise<void> {
       // Note: This clears all keys with the prefix. For production, consider
       // using Redis SCAN to be more selective, or use a separate Redis database.
-      const keys = await redis.keys(`${prefix}*`);
+      const keys = await redisClient.keys(`${prefix}*`);
       if (keys.length > 0) {
-        await redis.del(...keys);
+        await redisClient.del(keys);
       }
     },
 
     async has(key: string): Promise<boolean> {
-      const result = await redis.exists(`${prefix}${key}`);
+      const result = await redisClient.exists(`${prefix}${key}`);
       return result === 1;
     },
   };
@@ -62,22 +63,16 @@ function createRedisStore<T>(redis: Redis, prefix = 'cache:'): CacheStore<T> {
 
 // --- Setup ---
 
-const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
-const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 
-if (!UPSTASH_URL || !UPSTASH_TOKEN) {
-  console.error(`
-Missing Upstash credentials. Set in examples/.env:
+const redis = createClient({ url: REDIS_URL });
 
-  UPSTASH_REDIS_REST_URL=https://your-url.upstash.io
-  UPSTASH_REDIS_REST_TOKEN=your-token
-
-Get them from: https://console.upstash.com
-`);
+redis.on('error', (err) => {
+  console.error('Redis Client Error', err);
   process.exit(1);
-}
+});
 
-const redis = new Redis({ url: UPSTASH_URL, token: UPSTASH_TOKEN });
+await redis.connect();
 
 // --- Cached Fetch ---
 

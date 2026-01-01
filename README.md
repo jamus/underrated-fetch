@@ -8,7 +8,7 @@ Simple caching for outbound requests. **JSON responses only** — designed for r
 
 External APIs have rate limits. Redundant requests waste quota and add latency.
 
-`underrated-fetch` caches API responses with configurable TTL, reducing redundant outbound calls.
+`underrated-fetch` caches API responses with configurable TTL (Time to Live), reducing redundant outbound calls.
 
 ## Installation
 
@@ -71,7 +71,7 @@ interface CacheStore<T> {
 
 ### `createMemoryStore<T>(options?): CacheStore<T>`
 
-Built-in in-memory store with LRU eviction. Defaults to `maxSize: 1000` if not specified:
+Built-in in-memory store with LRU (Least Recently Used) eviction. Defaults to `maxSize: 1000` if not specified:
 
 ```typescript
 import { createMemoryStore } from 'underrated-fetch';
@@ -85,6 +85,8 @@ const store = createMemoryStore({
 **Note:** When using `createCachedFetch`, you can configure the memory store via `memoryStoreOptions` instead of creating a store manually.
 
 ## Examples
+
+> **Note:** Examples use [The Space Devs API](https://thespacedevs.com/) (Launch Library) for demonstration.
 
 ### Per-request TTL
 
@@ -179,6 +181,10 @@ See [`examples/redis-store.ts`](./examples/redis-store.ts) for a complete Redis 
 
 - Node.js 18+
 - ES2020+ environment
+
+## Credits
+
+Examples in this repository use [The Space Devs API](https://thespacedevs.com/) (Launch Library) for demonstration purposes. Thank you for providing a great free API for space launch data.
 
 ## Licence
 
