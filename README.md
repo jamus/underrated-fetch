@@ -1,5 +1,8 @@
 # underrated-fetch
 
+![CI](https://github.com/jamus/orbitq-app/actions/workflows/ci.yml/badge.svg)
+
+
 Simple caching for outbound requests. **JSON responses only** — designed for rate limiting on REST APIs.
 
 > ⚠️ **Scope:** This is an in-process cache — it does not share state across multiple servers or client apps. For distributed scenarios, use a shared store (e.g., Redis) or run this on a centralised gateway that all clients call.
