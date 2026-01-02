@@ -1,17 +1,19 @@
-# underrated-fetch
+# 🐶 underrated-fetch
 
 ![CI](https://github.com/jamus/orbitq-app/actions/workflows/ci.yml/badge.svg)
 
 
-Simple caching for outbound requests. **JSON responses only** — designed for rate limiting on REST APIs.
+Simple caching for outbound requests to avoiding hitting rate limits on REST APIs.
+**JSON responses only**
 
-> ⚠️ **Scope:** This is an in-process cache — it does not share state across multiple servers or client apps. For distributed scenarios, use a shared store (e.g., Redis) or run this on a centralised gateway that all clients call.
+## Scope
 
-## Problem
-
-External APIs have rate limits. Redundant requests waste quota and add latency.
+For APIs that have rate limits, redundant requests waste quota and add latency.
 
 `underrated-fetch` caches API responses with configurable TTL (Time to Live), reducing redundant outbound calls.
+
+> ☝️ This is an in-process cache — it does not share state across multiple servers or client apps. Designed run this on a centralised gateway that all clients call.
+
 
 ## Installation
 
@@ -89,8 +91,6 @@ const store = createMemoryStore({
 
 ## Examples
 
-> **Note:** Examples use [The Space Devs API](https://thespacedevs.com/) (Launch Library) for demonstration.
-
 ### Per-request TTL
 
 ```typescript
@@ -166,7 +166,7 @@ const cachedFetch = createCachedFetch({
 });
 ```
 
-See [`examples/redis-store.ts`](./examples/redis-store.ts) for a complete Redis implementation.
+See [`examples/redis-store.ts`](./examples/redis-store.ts) for a more complete Redis implementation.
 
 ## Security
 
@@ -187,7 +187,7 @@ See [`examples/redis-store.ts`](./examples/redis-store.ts) for a complete Redis 
 
 ## Credits
 
-Examples in this repository use [The Space Devs API](https://thespacedevs.com/) (Launch Library) for demonstration purposes. Thank you for providing a great free API for space launch data.
+Inspired by [The Space Devs API](https://thespacedevs.com/) (Launch Library). Thank you for providing a great free API for space launch data.
 
 ## Licence
 
