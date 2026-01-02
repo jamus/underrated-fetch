@@ -1,15 +1,6 @@
 /// <reference types="node" />
 /**
- * Example: Express server with Redis-backed caching using createCachedFetch.
- *
- * This example shows how to use createCachedFetch with a Redis store
- * for a minimal Express server — ideal as a gateway for mobile apps.
- *
- * Setup:
- * 1. npm install express redis dotenv
- * 2. Copy examples/.env.example to examples/.env and add your Redis connection string
- * 3. npx tsx examples/redis-store.ts
- * 4. Visit http://localhost:3000/launch/2baf1b13-6159-4640-864d-7959f9bfe978
+ * Example: Express server with Redis-backed caching
  */
 
 import { config } from 'dotenv';
