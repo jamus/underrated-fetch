@@ -1,5 +1,6 @@
 # 🐶 underrated-fetch
 
+![CI](https://github.com/jamus/orbitq-app/actions/workflows/ci.yml/badge.svg)
 [![npm version](https://img.shields.io/npm/v/@jmus/underrated-fetch.svg)](https://www.npmjs.com/package/@jmus/underrated-fetch)
 [![node version](https://img.shields.io/node/v/@jmus/underrated-fetch.svg)](https://www.npmjs.com/package/@jmus/underrated-fetch)
 [![license](https://img.shields.io/npm/l/@jmus/underrated-fetch.svg)](LICENSE)
