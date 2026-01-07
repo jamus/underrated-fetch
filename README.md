@@ -1,19 +1,54 @@
 # 🐶 underrated-fetch
 
-![CI](https://github.com/jamus/orbitq-app/actions/workflows/ci.yml/badge.svg)
+[![npm version](https://img.shields.io/npm/v/@jmus/underrated-fetch.svg)](https://www.npmjs.com/package/@jmus/underrated-fetch)
+[![node version](https://img.shields.io/node/v/@jmus/underrated-fetch.svg)](https://www.npmjs.com/package/@jmus/underrated-fetch)
+[![license](https://img.shields.io/npm/l/@jmus/underrated-fetch.svg)](LICENSE)
 
 
-Simple caching for outbound requests to avoiding hitting rate limits on REST APIs.
-**JSON responses only**
+A simple **Node.js** wrapper around `fetch` that adds **TTL-based caching** for **JSON REST APIs**.
 
-## Scope
+Designed to reduce redundant outbound requests and avoid rate limits when calling external APIs.
 
-For APIs that have rate limits, redundant requests waste quota and add latency.
+---
 
-`underrated-fetch` caches API responses with configurable TTL (Time to Live), reducing redundant outbound calls.
+## Why?
 
-> ☝️ This is an in-process cache — it does not share state across multiple servers or client apps. Designed run this on a centralised gateway that all clients call.
+External APIs often have:
+- Rate limits
+- Latency
+- Usage quotas
 
+If your app repeatedly calls the same endpoint, `underrated-fetch` caches responses and reuses them until they expire.
+
+---
+
+## Features
+
+- ✅ Caches JSON responses
+- ✅ TTL-based expiration
+- ✅ Per-request TTL overrides
+- ✅ Built-in in-memory LRU cache
+- ✅ Pluggable cache stores (Redis, DB, etc.)
+- ✅ Cache hit / miss hooks for metrics
+
+---
+
+## Non-Goals
+
+- ❌ Full HTTP caching (no `Cache-Control`, `ETag`, `Vary`, etc.)
+- ❌ Cross-process caching by default
+- ❌ Browser usage
+- ❌ Encryption of cached data
+
+---
+
+## Platform
+
+- Node.js 18+
+- Server-side usage only
+- Works in any Node environment (Express, Fastify, NestJS, cron jobs, workers)
+
+---
 
 ## Installation
 
@@ -21,50 +56,84 @@ For APIs that have rate limits, redundant requests waste quota and add latency.
 npm install underrated-fetch
 ```
 
+---
+
 ## Quick Start
 
-```typescript
+```ts
 import { createCachedFetch } from 'underrated-fetch';
 
 const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
 
-// Use like regular fetch — cache key is auto-generated from URL
+// Works like fetch, but cached
 const user = await cachedFetch('https://api.example.com/users/123');
-const same = await cachedFetch('https://api.example.com/users/123'); // Cache hit
+const same = await cachedFetch('https://api.example.com/users/123'); // cache hit
 ```
 
-Cache keys are automatically derived from the URL path:
-- `https://api.example.com/users/123` → `/users/123`
-- `https://api.example.com/search?q=test` → `/search?q=test`
+Cache keys are automatically derived from the URL path and query:
+
+```
+https://api.example.com/users/123     → /users/123
+https://api.example.com/search?q=foo  → /search?q=foo
+```
+
+---
 
 ## API
 
-### `createCachedFetch<T>(options): CachedFetch`
+### `createCachedFetch<T>(options)`
 
-```typescript
-import { createCachedFetch } from 'underrated-fetch';
+Creates a cached fetch function.
 
+```ts
 const cachedFetch = createCachedFetch({
-  timeToLive: 60_000,                    // Required: default TTL in milliseconds
+  timeToLive: 60_000,                    // Required: default TTL (ms)
   store: customStore,                    // Optional: custom cache store
-  memoryStoreOptions: { maxSize: 5000 }, // Optional: configure default memory store (ignored if store is provided)
-  shouldCache: (data) => true,           // Optional: validate before caching
+  memoryStoreOptions: { maxSize: 5000 }, // Optional: configure memory store
+  shouldCache: (data) => true,           // Optional: conditionally cache
   onHitCallback: (key) => {},            // Optional: called on cache hit
   onMissCallback: (key) => {},           // Optional: called on cache miss
 });
-
-// Default TTL
-const data = await cachedFetch('https://api.example.com/data');
-
-// Override TTL per request
-const fresh = await cachedFetch('https://api.example.com/live', { timeToLive: 5_000 });
 ```
 
-### `CacheStore<T>` Interface
+---
 
-Implement this interface for custom storage backends (Redis, databases, etc.):
+### Per-request TTL
 
-```typescript
+```ts
+await cachedFetch('https://api.example.com/data');                 // default TTL
+await cachedFetch('https://api.example.com/live', { timeToLive: 5_000 });
+```
+
+---
+
+## Storage
+
+### Default: in-memory LRU cache
+
+By default, `underrated-fetch` uses an **in-process LRU (Least Recently Used)** memory cache.
+
+```ts
+const cachedFetch = createCachedFetch({
+  timeToLive: 60_000,
+  memoryStoreOptions: {
+    maxSize: 1000, // default
+    onEvictCallback: (key) => {
+      console.log(`Evicted: ${key}`);
+    },
+  },
+});
+```
+
+> ⚠️ The default store is **not shared across processes or servers**.
+
+---
+
+### Custom stores (Redis, databases, etc.)
+
+Implement the `CacheStore<T>` interface:
+
+```ts
 interface CacheStore<T> {
   get(key: string): Promise<CacheEntry<T> | undefined>;
   set(key: string, entry: CacheEntry<T>): Promise<void>;
@@ -74,121 +143,70 @@ interface CacheStore<T> {
 }
 ```
 
-### `createMemoryStore<T>(options?): CacheStore<T>`
+Then provide it:
 
-Built-in in-memory store with LRU (Least Recently Used) eviction. Defaults to `maxSize: 1000` if not specified:
-
-```typescript
-import { createMemoryStore } from 'underrated-fetch';
-
-const store = createMemoryStore({
-  maxSize: 1000,  // Maximum entries before LRU eviction (default: 1000)
-  onEvictCallback: (key, entry) => console.log(`Evicted: ${key}`),
-});
-```
-
-**Note:** When using `createCachedFetch`, you can configure the memory store via `memoryStoreOptions` instead of creating a store manually.
-
-## Examples
-
-### Per-request TTL
-
-```typescript
-const cachedFetch = createCachedFetch({ timeToLive: 5 * 60_000 }); // Default 5 min
-
-await cachedFetch('https://api.example.com/launch/123');                    // 5 min
-await cachedFetch('https://api.example.com/upcoming', { timeToLive: 10_000 }); // 10 sec
-```
-
-### Conditional caching
-
-```typescript
-const cachedFetch = createCachedFetch({
-  timeToLive: 60_000,
-  shouldCache: (data) => data.status === 'success',
-});
-```
-
-### Observability
-
-```typescript
-const cachedFetch = createCachedFetch({
-  timeToLive: 60_000,
-  onHitCallback: (key) => metrics.increment('cache.hit'),
-  onMissCallback: (key) => metrics.increment('cache.miss'),
-});
-```
-
-### Configure memory store
-
-Configure the default in-memory store without creating a custom store:
-
-```typescript
-const cachedFetch = createCachedFetch({
-  timeToLive: 60_000,
-  memoryStoreOptions: {
-    maxSize: 5000,  // Override default maxSize (default: 1000)
-    onEvictCallback: (key, entry) => {
-      console.log(`Evicted: ${key}`);
-    },
-  },
-});
-```
-
-### Custom store
-
-Implement the `CacheStore<T>` interface for custom storage backends:
-
-```typescript
-import type { CacheStore, CacheEntry } from 'underrated-fetch';
-
-const myStore: CacheStore<MyData> = {
-  async get(key: string): Promise<CacheEntry<MyData> | undefined> {
-    // Your implementation (Redis, database, etc.)
-  },
-  async set(key: string, entry: CacheEntry<MyData>): Promise<void> {
-    // Your implementation
-  },
-  async delete(key: string): Promise<void> {
-    // Your implementation
-  },
-  async clear(): Promise<void> {
-    // Your implementation
-  },
-  async has(key: string): Promise<boolean> {
-    // Your implementation
-  },
-};
-
+```ts
 const cachedFetch = createCachedFetch({
   timeToLive: 60_000,
   store: myStore,
 });
 ```
 
-See [`examples/redis-store.ts`](./examples/redis-store.ts) for a more complete Redis implementation.
+See `examples/redis-store.ts` for a complete Redis implementation.
+
+---
+
+## Conditional Caching
+
+```ts
+const cachedFetch = createCachedFetch({
+  timeToLive: 60_000,
+  shouldCache: (data) => data.status === 'success',
+});
+```
+
+---
+
+## Observability
+
+```ts
+const cachedFetch = createCachedFetch({
+  timeToLive: 60_000,
+  onHitCallback: () => metrics.increment('cache.hit'),
+  onMissCallback: () => metrics.increment('cache.miss'),
+});
+```
+
+---
 
 ## Security
 
-⚠️ **Cached data is not encrypted.** Do not cache:
-- Authentication tokens or API keys
-- Passwords or credentials  
+⚠️ Cached data is **not encrypted**.
+
+Do **not** cache:
+- API keys or authentication tokens
+- Passwords or credentials
 - Personally identifiable information (PII)
 
-| Risk | Mitigation |
-|------|------------|
-| Memory exhaustion | Set `maxSize` on memory stores |
-| Cache poisoning | Validate with `shouldCache` |
+---
+
+## When should I use this?
+
+Use `underrated-fetch` if you:
+- Call third-party REST APIs from Node.js
+- Want simple, predictable caching
+- Need to reduce rate-limit pressure
+- Prefer explicit TTLs over HTTP cache headers
+
+---
 
 ## Requirements
 
 - Node.js 18+
-- ES2020+ environment
+- ES2020+
 
-## Credits
+---
 
-Inspired by [The Space Devs API](https://thespacedevs.com/) (Launch Library). Thank you for providing a great free API for space launch data.
-
-## Licence
+## License
 
 MIT
