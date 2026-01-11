@@ -10,6 +10,8 @@ A simple **Node.js** wrapper around `fetch` that adds **TTL-based caching** for 
 
 Designed to reduce redundant outbound requests and avoid rate limits when calling external APIs.
 
+### Example usage
+
 ```mermaid
 flowchart LR
     Mobile["Mobile App"] --> App["Node Service"]
