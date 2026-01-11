@@ -10,6 +10,31 @@ A simple **Node.js** wrapper around `fetch` that adds **TTL-based caching** for 
 
 Designed to reduce redundant outbound requests and avoid rate limits when calling external APIs.
 
+```mermaid
+flowchart LR
+    Mobile["Mobile App"] --> App["Node Service"]
+    App --> UF["🐶 Underrated fetch"]
+
+    %% Combined optional cache block
+    UF --> OptionalCache["Cache:<br>A) In Memory <br>B) Redis Shared Cache <br>C) Other Options"]
+
+    %% Cache hit/miss
+    OptionalCache -- cache hit --> UF
+    OptionalCache -- cache miss --> UF
+
+    %% Fetch network
+    UF --> Fetch["Fetch API"]
+    Fetch --> API["External API"]
+    API --> Fetch
+
+    %% Store results
+    UF -- store --> OptionalCache
+
+    %% App return
+    UF --> App
+    App --> Mobile
+```
+
 ---
 
 ## Why?
