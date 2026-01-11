@@ -1,4 +1,4 @@
-# 🐶 underrated-fetch
+# 🐶 Underrated-fetch
 
 ![CI](https://github.com/jamus/orbitq-app/actions/workflows/ci.yml/badge.svg)
 [![npm version](https://img.shields.io/npm/v/@jmus/underrated-fetch.svg)](https://www.npmjs.com/package/@jmus/underrated-fetch)
@@ -9,6 +9,33 @@
 A simple **Node.js** wrapper around `fetch` that adds **TTL-based caching** for **JSON REST APIs**.
 
 Designed to reduce redundant outbound requests and avoid rate limits when calling external APIs.
+
+### Example usage
+
+```mermaid
+flowchart LR
+    Mobile["Mobile App"] --> App["Node Service"]
+    App --> UF["🐶 Underrated fetch"]
+
+    %% Combined optional cache block
+    UF --> OptionalCache["Cache:<br>A) In Memory <br>B) Redis Shared Cache <br>C) Other Options"]
+
+    %% Cache hit/miss
+    OptionalCache -- cache hit --> UF
+    OptionalCache -- cache miss --> UF
+
+    %% Fetch network
+    UF --> Fetch["Fetch API"]
+    Fetch --> API["External API"]
+    API --> Fetch
+
+    %% Store results
+    UF -- store --> OptionalCache
+
+    %% App return
+    UF --> App
+    App --> Mobile
+```
 
 ---
 
