@@ -454,5 +454,245 @@ describe('createCachedFetch', () => {
       }
     });
   });
+
+  describe('concurrent request deduplication', () => {
+    it('should deduplicate simultaneous requests for the same URL', async () => {
+      const mockData = { id: '123', name: 'Test Launch' };
+      const fetchMock = mockFetch({ '/launch/123': mockData });
+
+      try {
+        const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
+
+        // Fire 5 simultaneous requests
+        const promises = [
+          cachedFetch('https://api.example.com/launch/123'),
+          cachedFetch('https://api.example.com/launch/123'),
+          cachedFetch('https://api.example.com/launch/123'),
+          cachedFetch('https://api.example.com/launch/123'),
+          cachedFetch('https://api.example.com/launch/123'),
+        ];
+
+        const results = await Promise.all(promises);
+
+        // Verify only 1 network call was made
+        assert.strictEqual(fetchMock.getCallCount(), 1);
+
+        // Verify all results are the same
+        results.forEach(result => {
+          assert.deepStrictEqual(result, mockData);
+        });
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should propagate errors to all waiting requests', async () => {
+      const errorMessage = 'Network error';
+      globalThis.fetch = mock.fn(async () => {
+        throw new Error(errorMessage);
+      }) as typeof fetch;
+
+      try {
+        const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
+
+        // Fire 3 simultaneous requests
+        const promises = [
+          cachedFetch('https://api.example.com/data'),
+          cachedFetch('https://api.example.com/data'),
+          cachedFetch('https://api.example.com/data'),
+        ];
+
+        // All should reject with the same error
+        const errors = await Promise.allSettled(promises);
+        errors.forEach(result => {
+          assert.strictEqual(result.status, 'rejected');
+          if (result.status === 'rejected') {
+            assert.ok(result.reason instanceof Error);
+            assert.strictEqual(result.reason.message, errorMessage);
+          }
+        });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('should handle mixed cache hit and in-flight requests', async () => {
+      const mockData = { id: '123', name: 'Test' };
+      const fetchMock = mockFetch({ '/data': mockData });
+
+      try {
+        const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
+
+        // First request starts (cache miss, will be in-flight)
+        const promise1 = cachedFetch('https://api.example.com/data');
+
+        // Second request happens while first is in-flight (should share promise)
+        const promise2 = cachedFetch('https://api.example.com/data');
+
+        // Wait for both to complete
+        await Promise.all([promise1, promise2]);
+
+        // Verify only 1 network call
+        assert.strictEqual(fetchMock.getCallCount(), 1);
+
+        // Third request after completion (should be cache hit)
+        const result3 = await cachedFetch('https://api.example.com/data');
+
+        // Still only 1 network call
+        assert.strictEqual(fetchMock.getCallCount(), 1);
+        assert.deepStrictEqual(result3, mockData);
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should use first request TTL when concurrent requests have different TTLs', async () => {
+      const mockData = { value: 'test' };
+      const fetchMock = mockFetch({ '/data': mockData });
+
+      try {
+        const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
+
+        // Fire 2 simultaneous requests with different TTLs
+        const [result1, result2] = await Promise.all([
+          cachedFetch('https://api.example.com/data', { timeToLive: 100 }),
+          cachedFetch('https://api.example.com/data', { timeToLive: 5000 }),
+        ]);
+
+        // Verify only 1 network call
+        assert.strictEqual(fetchMock.getCallCount(), 1);
+
+        // Both should get the same data
+        assert.deepStrictEqual(result1, mockData);
+        assert.deepStrictEqual(result2, mockData);
+
+        // Wait for the first request's TTL to expire
+        await new Promise(resolve => setTimeout(resolve, 150));
+
+        // Next request should fetch again (first TTL expired)
+        await cachedFetch('https://api.example.com/data');
+        assert.strictEqual(fetchMock.getCallCount(), 2);
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should clean up in-flight map after completion', async () => {
+      const mockData = { value: 'test' };
+      const fetchMock = mockFetch({ '/data': mockData });
+
+      try {
+        const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
+
+        // Fire concurrent requests
+        await Promise.all([
+          cachedFetch('https://api.example.com/data'),
+          cachedFetch('https://api.example.com/data'),
+        ]);
+
+        // Wait a bit to ensure cleanup
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Fire another request - should be cache hit, not in-flight
+        const result = await cachedFetch('https://api.example.com/data');
+
+        // Should still be only 1 network call (cache hit)
+        assert.strictEqual(fetchMock.getCallCount(), 1);
+        assert.deepStrictEqual(result, mockData);
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should clean up in-flight map after error', async () => {
+      let callCount = 0;
+      globalThis.fetch = mock.fn(async () => {
+        callCount++;
+        if (callCount === 1) {
+          throw new Error('Network error');
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ value: 'success' }),
+        } as unknown as Response;
+      }) as typeof fetch;
+
+      try {
+        const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
+
+        // First attempt fails
+        await assert.rejects(
+          Promise.all([
+            cachedFetch('https://api.example.com/data'),
+            cachedFetch('https://api.example.com/data'),
+          ]),
+          { message: 'Network error' }
+        );
+
+        // Wait a bit to ensure cleanup
+        await new Promise(resolve => setTimeout(resolve, 10));
+
+        // Second attempt should work (in-flight map cleaned up)
+        const result = await cachedFetch('https://api.example.com/data');
+        assert.deepStrictEqual(result, { value: 'success' });
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('should not deduplicate non-GET requests', async () => {
+      const fetchMock = mockFetch({ '/data': { value: 'test' } });
+
+      try {
+        const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
+
+        // Fire 3 simultaneous POST requests
+        await Promise.all([
+          cachedFetch('https://api.example.com/data', { method: 'POST' }),
+          cachedFetch('https://api.example.com/data', { method: 'POST' }),
+          cachedFetch('https://api.example.com/data', { method: 'POST' }),
+        ]);
+
+        // Should make 3 network calls (no deduplication for non-GET)
+        assert.strictEqual(fetchMock.getCallCount(), 3);
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should deduplicate even when shouldCache returns false', async () => {
+      const mockData = { shouldNotCache: true };
+      const fetchMock = mockFetch({ '/data': mockData });
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          shouldCache: () => false,
+        });
+
+        // Fire 3 simultaneous requests
+        const results = await Promise.all([
+          cachedFetch('https://api.example.com/data'),
+          cachedFetch('https://api.example.com/data'),
+          cachedFetch('https://api.example.com/data'),
+        ]);
+
+        // Should only make 1 network call (deduplicated)
+        assert.strictEqual(fetchMock.getCallCount(), 1);
+
+        // All should get the same data
+        results.forEach(result => {
+          assert.deepStrictEqual(result, mockData);
+        });
+
+        // Next request should fetch again (not cached)
+        await cachedFetch('https://api.example.com/data');
+        assert.strictEqual(fetchMock.getCallCount(), 2);
+      } finally {
+        fetchMock.restore();
+      }
+    });
+  });
 });
 
