@@ -100,6 +100,9 @@ export function createCachedFetch<T = unknown>(
 
   const store: CacheStore<T> = providedStore ?? createMemoryStore<T>(memoryStoreOptions);
 
+  // Map to track in-flight requests for deduplication
+  const inFlightRequests = new Map<string, Promise<T>>();
+
   /**
    * Generate cache key from URL.
    * Uses pathname + search params (excludes domain).
@@ -172,25 +175,44 @@ export function createCachedFetch<T = unknown>(
       return entry.value;
     }
 
-    // Cache miss
+    // Check if there's already an in-flight request for this key
+    const inFlightPromise = inFlightRequests.get(key);
+    if (inFlightPromise) {
+      return inFlightPromise;
+    }
+
+    // Cache miss - create new fetch request
     if (onMissCallback) {
       onMissCallback(key);
     }
 
-    const response = await fetch(url, fetchInit);
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
+    // Create the fetch promise and store it in the in-flight map
+    const fetchPromise = (async (): Promise<T> => {
+      try {
+        const response = await fetch(url, fetchInit);
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
 
-    const data = await parseJSON(response);
+        const data = await parseJSON(response);
 
-    // Check if result should be cached
-    const shouldCacheResult = shouldCache ? shouldCache(data) : true;
-    if (shouldCacheResult) {
-      await store.set(key, createEntry(data, timeToLive));
-    }
+        // Check if result should be cached
+        const shouldCacheResult = shouldCache ? shouldCache(data) : true;
+        if (shouldCacheResult) {
+          await store.set(key, createEntry(data, timeToLive));
+        }
 
-    return data;
+        return data;
+      } finally {
+        // Clean up in-flight map entry after completion (success or failure)
+        inFlightRequests.delete(key);
+      }
+    })();
+
+    // Store the promise in the in-flight map
+    inFlightRequests.set(key, fetchPromise);
+
+    return fetchPromise;
   }
 
   return cachedFetch;

@@ -5,7 +5,6 @@
 [![node version](https://img.shields.io/node/v/@jmus/underrated-fetch.svg)](https://www.npmjs.com/package/@jmus/underrated-fetch)
 [![license](https://img.shields.io/npm/l/@jmus/underrated-fetch.svg)](LICENSE)
 
-
 A simple **Node.js** wrapper around `fetch` that adds **TTL-based caching** for **JSON REST APIs**.
 
 Designed to reduce redundant outbound requests and avoid rate limits when calling external APIs.
@@ -42,6 +41,7 @@ flowchart LR
 ## Why?
 
 External APIs often have:
+
 - Rate limits
 - Latency
 - Usage quotas
@@ -58,6 +58,7 @@ If your app repeatedly calls the same endpoint, `underrated-fetch` caches respon
 - ✅ Built-in in-memory LRU cache
 - ✅ Pluggable cache stores (Redis, DB, etc.)
 - ✅ Cache hit / miss hooks for metrics
+- ✅ Request deduplication for concurrent requests
 
 ---
 
@@ -89,13 +90,13 @@ npm install underrated-fetch
 ## Quick Start
 
 ```ts
-import { createCachedFetch } from 'underrated-fetch';
+import { createCachedFetch } from "underrated-fetch";
 
 const cachedFetch = createCachedFetch({ timeToLive: 60_000 });
 
 // Works like fetch, but cached
-const user = await cachedFetch('https://api.example.com/users/123');
-const same = await cachedFetch('https://api.example.com/users/123'); // cache hit
+const user = await cachedFetch("https://api.example.com/users/123");
+const same = await cachedFetch("https://api.example.com/users/123"); // cache hit
 ```
 
 Cache keys are automatically derived from the URL path and query:
@@ -115,12 +116,12 @@ Creates a cached fetch function.
 
 ```ts
 const cachedFetch = createCachedFetch({
-  timeToLive: 60_000,                    // Required: default TTL (ms)
-  store: customStore,                    // Optional: custom cache store
+  timeToLive: 60_000, // Required: default TTL (ms)
+  store: customStore, // Optional: custom cache store
   memoryStoreOptions: { maxSize: 5000 }, // Optional: configure memory store
-  shouldCache: (data) => true,           // Optional: conditionally cache
-  onHitCallback: (key) => {},            // Optional: called on cache hit
-  onMissCallback: (key) => {},           // Optional: called on cache miss
+  shouldCache: (data) => true, // Optional: conditionally cache
+  onHitCallback: (key) => {}, // Optional: called on cache hit
+  onMissCallback: (key) => {}, // Optional: called on cache miss
 });
 ```
 
@@ -129,8 +130,8 @@ const cachedFetch = createCachedFetch({
 ### Per-request TTL
 
 ```ts
-await cachedFetch('https://api.example.com/data');                 // default TTL
-await cachedFetch('https://api.example.com/live', { timeToLive: 5_000 });
+await cachedFetch("https://api.example.com/data"); // default TTL
+await cachedFetch("https://api.example.com/live", { timeToLive: 5_000 });
 ```
 
 ---
@@ -189,7 +190,7 @@ See `examples/redis-store.ts` for a complete Redis implementation.
 ```ts
 const cachedFetch = createCachedFetch({
   timeToLive: 60_000,
-  shouldCache: (data) => data.status === 'success',
+  shouldCache: (data) => data.status === "success",
 });
 ```
 
@@ -200,10 +201,29 @@ const cachedFetch = createCachedFetch({
 ```ts
 const cachedFetch = createCachedFetch({
   timeToLive: 60_000,
-  onHitCallback: () => metrics.increment('cache.hit'),
-  onMissCallback: () => metrics.increment('cache.miss'),
+  onHitCallback: () => metrics.increment("cache.hit"),
+  onMissCallback: () => metrics.increment("cache.miss"),
 });
 ```
+
+---
+
+## Concurrent Request Deduplication
+
+When multiple requests for the same URL happen simultaneously (before any complete), `underrated-fetch` automatically deduplicates them to a single network call. All requests share the same promise and receive the same response.
+
+```ts
+// All 5 requests share a single fetch call
+const promises = await Promise.all([
+  cachedFetch("https://api.example.com/users/123"),
+  cachedFetch("https://api.example.com/users/123"),
+  cachedFetch("https://api.example.com/users/123"),
+  cachedFetch("https://api.example.com/users/123"),
+  cachedFetch("https://api.example.com/users/123"),
+]);
+```
+
+This prevents redundant network calls when multiple parts of your application request the same data at the same time, further reducing rate-limit pressure and improving performance.
 
 ---
 
@@ -212,6 +232,7 @@ const cachedFetch = createCachedFetch({
 ⚠️ Cached data is **not encrypted**.
 
 Do **not** cache:
+
 - API keys or authentication tokens
 - Passwords or credentials
 - Personally identifiable information (PII)
@@ -221,6 +242,7 @@ Do **not** cache:
 ## When should I use this?
 
 Use `underrated-fetch` if you:
+
 - Call third-party REST APIs from Node.js
 - Want simple, predictable caching
 - Need to reduce rate-limit pressure
