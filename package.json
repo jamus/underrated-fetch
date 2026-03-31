@@ -1,6 +1,6 @@
 {
   "name": "@jmus/underrated-fetch",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Simple caching for outbound requests",
   "publishConfig": {
     "access": "public"
