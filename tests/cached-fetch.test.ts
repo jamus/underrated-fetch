@@ -227,6 +227,74 @@ describe('createCachedFetch', () => {
         fetchMock.restore();
       }
     });
+
+    it('should call onSuccessCallback after a successful upstream fetch', async () => {
+      const successes: string[] = [];
+      const fetchMock = mockFetch({
+        '/a': { id: 'a' },
+        '/b': { id: 'b' },
+      });
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          onSuccessCallback: (key) => successes.push(key),
+        });
+
+        await cachedFetch('https://api.example.com/a');
+        await cachedFetch('https://api.example.com/b');
+        await cachedFetch('https://api.example.com/a'); // cache hit, no upstream fetch
+
+        assert.deepStrictEqual(successes, ['/a', '/b']);
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should not call onSuccessCallback on a cache hit', async () => {
+      const successes: string[] = [];
+      const fetchMock = mockFetch({ '/data': { value: 'test' } });
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          onSuccessCallback: (key) => successes.push(key),
+        });
+
+        await cachedFetch('https://api.example.com/data');
+        await cachedFetch('https://api.example.com/data');
+        await cachedFetch('https://api.example.com/data');
+
+        assert.strictEqual(successes.length, 1);
+        assert.strictEqual(successes[0], '/data');
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should not call onSuccessCallback when the request fails', async () => {
+      const successes: string[] = [];
+
+      globalThis.fetch = mock.fn(async () => {
+        throw new Error('Network error');
+      }) as typeof fetch;
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          onSuccessCallback: (key) => successes.push(key),
+        });
+
+        await assert.rejects(
+          cachedFetch('https://api.example.com/data'),
+          { message: 'Network error' }
+        );
+
+        assert.strictEqual(successes.length, 0);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 
   describe('custom store', () => {

@@ -54,6 +54,9 @@ export interface CachedFetchOptions<T = unknown> {
 
   /** Called on cache miss */
   onMissCallback?: (key: string) => void;
+
+  /** Called after a successful upstream fetch (cache miss that resolved OK) */
+  onSuccessCallback?: (key: string) => void;
 }
 
 /**
@@ -94,6 +97,7 @@ export function createCachedFetch<T = unknown>(
     shouldCache,
     onHitCallback,
     onMissCallback,
+    onSuccessCallback,
   } = options;
 
   validateTimeToLive(defaultTimeToLive);
@@ -195,6 +199,10 @@ export function createCachedFetch<T = unknown>(
         }
 
         const data = await parseJSON(response);
+
+        if (onSuccessCallback) {
+          onSuccessCallback(key);
+        }
 
         // Check if result should be cached
         const shouldCacheResult = shouldCache ? shouldCache(data) : true;
