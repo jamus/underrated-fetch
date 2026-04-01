@@ -295,6 +295,112 @@ describe('createCachedFetch', () => {
         globalThis.fetch = originalFetch;
       }
     });
+
+    it('should call onErrorCallback when the request fails with a network error', async () => {
+      const errors: Array<{ key: string; error: unknown }> = [];
+
+      globalThis.fetch = mock.fn(async () => {
+        throw new Error('Network error');
+      }) as typeof fetch;
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          onErrorCallback: (key, error) => errors.push({ key, error }),
+        });
+
+        await assert.rejects(
+          cachedFetch('https://api.example.com/data'),
+          { message: 'Network error' }
+        );
+
+        assert.strictEqual(errors.length, 1);
+        assert.strictEqual(errors[0].key, '/data');
+        assert.ok(errors[0].error instanceof Error);
+        assert.strictEqual((errors[0].error as Error).message, 'Network error');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('should call onErrorCallback when the response is not OK', async () => {
+      const errors: Array<{ key: string; error: unknown }> = [];
+
+      globalThis.fetch = mock.fn(async () => {
+        return {
+          ok: false,
+          status: 500,
+          statusText: 'Internal Server Error',
+        } as unknown as Response;
+      }) as typeof fetch;
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          onErrorCallback: (key, error) => errors.push({ key, error }),
+        });
+
+        await assert.rejects(
+          cachedFetch('https://api.example.com/data'),
+          { message: 'HTTP 500: Internal Server Error' }
+        );
+
+        assert.strictEqual(errors.length, 1);
+        assert.strictEqual(errors[0].key, '/data');
+        assert.ok(errors[0].error instanceof Error);
+        assert.strictEqual((errors[0].error as Error).message, 'HTTP 500: Internal Server Error');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('should not call onErrorCallback on a successful request', async () => {
+      const errors: Array<{ key: string; error: unknown }> = [];
+      const fetchMock = mockFetch({ '/data': { value: 'test' } });
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          onErrorCallback: (key, error) => errors.push({ key, error }),
+        });
+
+        await cachedFetch('https://api.example.com/data');
+        await cachedFetch('https://api.example.com/data'); // cache hit
+
+        assert.strictEqual(errors.length, 0);
+      } finally {
+        fetchMock.restore();
+      }
+    });
+
+    it('should call onErrorCallback for each concurrent request that shares a failed in-flight promise', async () => {
+      const errors: Array<{ key: string }> = [];
+
+      globalThis.fetch = mock.fn(async () => {
+        throw new Error('Network error');
+      }) as typeof fetch;
+
+      try {
+        const cachedFetch = createCachedFetch({
+          timeToLive: 60_000,
+          onErrorCallback: (key) => errors.push({ key }),
+        });
+
+        await assert.rejects(
+          Promise.all([
+            cachedFetch('https://api.example.com/data'),
+            cachedFetch('https://api.example.com/data'),
+            cachedFetch('https://api.example.com/data'),
+          ])
+        );
+
+        // onErrorCallback fires once (from the single underlying fetch, not each waiter)
+        assert.strictEqual(errors.length, 1);
+        assert.strictEqual(errors[0].key, '/data');
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
   });
 
   describe('custom store', () => {
