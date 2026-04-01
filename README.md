@@ -57,7 +57,7 @@ If your app repeatedly calls the same endpoint, `underrated-fetch` caches respon
 - ✅ Per-request TTL overrides
 - ✅ Built-in in-memory LRU cache
 - ✅ Pluggable cache stores (Redis, DB, etc.)
-- ✅ Cache hit / miss / success hooks for metrics
+- ✅ Cache hit / miss / success / error hooks for metrics
 - ✅ Request deduplication for concurrent requests
 
 ---
@@ -123,6 +123,7 @@ const cachedFetch = createCachedFetch({
   onHitCallback: (key) => {}, // Optional: called on cache hit
   onMissCallback: (key) => {}, // Optional: called on cache miss
   onSuccessCallback: (key) => {}, // Optional: called after a successful upstream fetch
+  onErrorCallback: (key, error) => {}, // Optional: called when an upstream fetch fails
 });
 ```
 
@@ -205,6 +206,10 @@ const cachedFetch = createCachedFetch({
   onHitCallback: () => metrics.increment("cache.hit"),
   onMissCallback: () => metrics.increment("cache.miss"),
   onSuccessCallback: () => metrics.increment("cache.success"),
+  onErrorCallback: (key, error) => {
+    metrics.increment("cache.error");
+    logger.error(`Fetch failed for ${key}`, error);
+  },
 });
 ```
 
