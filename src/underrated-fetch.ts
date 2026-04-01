@@ -57,6 +57,9 @@ export interface CachedFetchOptions<T = unknown> {
 
   /** Called after a successful upstream fetch (cache miss that resolved OK) */
   onSuccessCallback?: (key: string) => void;
+
+  /** Called when an upstream fetch fails (network error or non-OK response) */
+  onErrorCallback?: (key: string, error: unknown) => void;
 }
 
 /**
@@ -98,6 +101,7 @@ export function createCachedFetch<T = unknown>(
     onHitCallback,
     onMissCallback,
     onSuccessCallback,
+    onErrorCallback,
   } = options;
 
   validateTimeToLive(defaultTimeToLive);
@@ -211,6 +215,11 @@ export function createCachedFetch<T = unknown>(
         }
 
         return data;
+      } catch (error) {
+        if (onErrorCallback) {
+          onErrorCallback(key, error);
+        }
+        throw error;
       } finally {
         // Clean up in-flight map entry after completion (success or failure)
         inFlightRequests.delete(key);
